@@ -22,7 +22,7 @@ from sklearn.inspection import permutation_importance
 @st.cache_data
 def load_data():
     """Load and cache the dataset"""
-    url = "https://raw.githubusercontent.com/yourusername/yourrepo/main/diabetes_binary_5050split_health_indicators_BRFSS2015.csv"
+    url = "diabetes_binary_5050split_health_indicators_BRFSS2015.csv"
     return pd.read_csv(url)
 
 def clean_data(df):
