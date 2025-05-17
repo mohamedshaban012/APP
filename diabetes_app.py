@@ -17,12 +17,13 @@ from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import RandomForestClassifier
 
 # =================== UTILS ===================
-@st.cache_data
-
 def load_default_data():
-    return pd.read_csv("diabetes_binary_5050split_health_indicators_BRFSS2015.csv")
-
-@st.cache_data
+    filepath = "diabetes_binary_5050split_health_indicators_BRFSS2015.csv"
+    if os.path.exists(filepath):
+        return pd.read_csv(filepath)
+    else:
+        st.error("Default dataset not found. Please upload your own CSV file.")
+        st.stop()
 
 def clean_data(df):
     df = df.dropna()
@@ -41,12 +42,12 @@ def perform_eda(df):
     st.pyplot(fig)
 
     st.subheader("Feature Correlation with Diabetes")
-    corr = df.corr()[['Diabetes_binary']].sort_values('Diabetes_binary', ascending=False)
+    corr = df.corr(numeric_only=True)[['Diabetes_binary']].sort_values('Diabetes_binary', ascending=False)
     st.dataframe(corr.style.background_gradient(cmap='coolwarm', vmin=-1, vmax=1))
 
     st.subheader("Correlation Heatmap")
     fig, ax = plt.subplots(figsize=(12,10))
-    sns.heatmap(df.corr(), ax=ax, cmap='coolwarm', annot=False)
+    sns.heatmap(df.corr(numeric_only=True), ax=ax, cmap='coolwarm', annot=False)
     st.pyplot(fig)
 
     st.subheader("Feature Distributions by Diabetes Status")
@@ -62,14 +63,14 @@ def perform_dimensionality_reduction(X, y):
 
     pca = PCA().fit(StandardScaler().fit_transform(X))
     fig, ax = plt.subplots()
-    plt.plot(np.cumsum(pca.explained_variance_ratio_))
-    plt.axhline(y=0.95, color='r', linestyle='--')
-    plt.xlabel('Components')
-    plt.ylabel('Explained Variance')
+    ax.plot(np.cumsum(pca.explained_variance_ratio_))
+    ax.axhline(y=0.95, color='r', linestyle='--')
+    ax.set_xlabel('Components')
+    ax.set_ylabel('Explained Variance')
     st.pyplot(fig)
 
     method = st.radio("Select feature selection method:", ["PCA", "Forward Selection", "Backward Selection", "Feature Importance"])
-    
+
     if method == "PCA":
         n_components = st.slider("Number of PCA components", 1, min(20, X.shape[1]), 5)
         pca = PCA(n_components=n_components)
@@ -115,11 +116,13 @@ with st.sidebar:
     st.header("Navigation")
     st.markdown("- 📊 EDA\n- 🔍 Feature Selection\n- 🧠 Train Model\n- 📈 Predict Risk")
 
-# Load and clean data
-try:
-    df = pd.read_csv(uploaded_file) if uploaded_file else load_default_data()
-except FileNotFoundError:
-    st.error("Default dataset not found. Please upload your own CSV file.")
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+else:
+    df = load_default_data()
+
+if df is None or df.empty:
+    st.error("Dataset is empty or invalid.")
     st.stop()
 
 df_clean = clean_data(df)
