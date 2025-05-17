@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import os
 import joblib
+import traceback
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
@@ -106,92 +107,96 @@ def train_svm(X_train, y_train):
     return pipeline
 
 # =================== MAIN APP ===================
-st.set_page_config(page_title="Diabetes Risk Predictor", layout="wide")
-st.title("🩺 Diabetes Risk Predictor")
+try:
+    st.set_page_config(page_title="Diabetes Risk Predictor", layout="wide")
+    st.title("🩺 Diabetes Risk Predictor")
 
-with st.sidebar:
-    st.header("Upload Dataset")
-    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-    st.markdown("---")
-    st.header("Navigation")
-    st.markdown("- 📊 EDA\n- 🔍 Feature Selection\n- 🧠 Train Model\n- 📈 Predict Risk")
+    with st.sidebar:
+        st.header("Upload Dataset")
+        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+        st.markdown("---")
+        st.header("Navigation")
+        st.markdown("- 📊 EDA\n- 🔍 Feature Selection\n- 🧠 Train Model\n- 📈 Predict Risk")
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-else:
-    df = load_default_data()
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = load_default_data()
 
-if df is None or df.empty:
-    st.error("Dataset is empty or invalid.")
-    st.stop()
+    if df is None or df.empty:
+        st.error("Dataset is empty or invalid.")
+        st.stop()
 
-df_clean = clean_data(df)
-X = df_clean.drop('Diabetes_binary', axis=1)
-y = df_clean['Diabetes_binary']
+    df_clean = clean_data(df)
+    X = df_clean.drop('Diabetes_binary', axis=1)
+    y = df_clean['Diabetes_binary']
 
-# Tabs for each section
-tab1, tab2, tab3, tab4 = st.tabs(["📊 EDA", "🔍 Feature Selection", "🧠 Train Model", "📈 Predict Risk"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 EDA", "🔍 Feature Selection", "🧠 Train Model", "📈 Predict Risk"])
 
-with tab1:
-    st.header("Exploratory Data Analysis")
-    perform_eda(df_clean)
+    with tab1:
+        st.header("Exploratory Data Analysis")
+        perform_eda(df_clean)
 
-with tab2:
-    st.header("Feature Selection & Dimensionality Reduction")
-    X_reduced, reducer = perform_dimensionality_reduction(X, y)
+    with tab2:
+        st.header("Feature Selection & Dimensionality Reduction")
+        X_reduced, reducer = perform_dimensionality_reduction(X, y)
 
-with tab3:
-    st.header("Train Model")
-    if st.button("Train SVM Model"):
-        X_train, X_test, y_train, y_test = train_test_split(X_reduced, y, test_size=0.2, random_state=42)
-        model = train_svm(X_train, y_train)
-        os.makedirs("models", exist_ok=True)
-        joblib.dump((model, reducer), "models/model.joblib")
+    with tab3:
+        st.header("Train Model")
+        if st.button("Train SVM Model"):
+            X_train, X_test, y_train, y_test = train_test_split(X_reduced, y, test_size=0.2, random_state=42)
+            model = train_svm(X_train, y_train)
+            os.makedirs("models", exist_ok=True)
+            joblib.dump((model, reducer), "models/model.joblib")
 
-        acc = accuracy_score(y_test, model.predict(X_test))
-        st.metric("Accuracy", f"{acc:.2%}")
-        st.text(classification_report(y_test, model.predict(X_test)))
+            acc = accuracy_score(y_test, model.predict(X_test))
+            st.metric("Accuracy", f"{acc:.2%}")
+            st.text(classification_report(y_test, model.predict(X_test)))
 
-        fig, ax = plt.subplots()
-        sns.heatmap(confusion_matrix(y_test, model.predict(X_test)), annot=True, fmt='d', cmap='Blues', ax=ax)
-        st.pyplot(fig)
+            fig, ax = plt.subplots()
+            sns.heatmap(confusion_matrix(y_test, model.predict(X_test)), annot=True, fmt='d', cmap='Blues', ax=ax)
+            st.pyplot(fig)
 
-with tab4:
-    st.header("Predict Risk")
-    if os.path.exists("models/model.joblib"):
-        model, reducer = joblib.load("models/model.joblib")
+    with tab4:
+        st.header("Predict Risk")
+        if os.path.exists("models/model.joblib"):
+            model, reducer = joblib.load("models/model.joblib")
 
-        st.subheader("Enter Values for Prediction")
-        input_data = {}
-        with st.form("prediction_form"):
-            cols = st.columns(2)
-            for i, feat in enumerate(X.columns[:5]):
-                with cols[i % 2]:
-                    input_data[feat] = st.slider(feat, float(X[feat].min()), float(X[feat].max()), float(X[feat].median()))
-            submitted = st.form_submit_button("Predict Diabetes Risk")
+            st.subheader("Enter Values for Prediction")
+            input_data = {}
+            with st.form("prediction_form"):
+                cols = st.columns(2)
+                for i, feat in enumerate(X.columns[:5]):
+                    with cols[i % 2]:
+                        input_data[feat] = st.slider(feat, float(X[feat].min()), float(X[feat].max()), float(X[feat].median()))
+                submitted = st.form_submit_button("Predict Diabetes Risk")
 
-        if submitted:
-            for feat in X.columns:
-                if feat not in input_data:
-                    input_data[feat] = float(X[feat].median())
-            input_df = pd.DataFrame([input_data])
+            if submitted:
+                for feat in X.columns:
+                    if feat not in input_data:
+                        input_data[feat] = float(X[feat].median())
+                input_df = pd.DataFrame([input_data])
 
-            if isinstance(reducer, PCA):
-                scaled_input = StandardScaler().fit_transform(input_df)
-                input_transformed = reducer.transform(scaled_input)
-            elif hasattr(reducer, 'get_support'):
-                input_transformed = input_df[X.columns[reducer.get_support()]]
-            elif isinstance(reducer, list):
-                input_transformed = input_df[reducer]
-            else:
-                st.error("Unknown reducer type")
-                st.stop()
+                if isinstance(reducer, PCA):
+                    scaled_input = StandardScaler().fit_transform(input_df)
+                    input_transformed = reducer.transform(scaled_input)
+                elif hasattr(reducer, 'get_support'):
+                    input_transformed = input_df[X.columns[reducer.get_support()]]
+                elif isinstance(reducer, list):
+                    input_transformed = input_df[reducer]
+                else:
+                    st.error("Unknown reducer type")
+                    st.stop()
 
-            risk = model.predict_proba(input_transformed)[0][1]
-            st.metric("Risk Score", f"{risk:.1%}")
-            if risk > 0.7:
-                st.error("High Risk - Consult a doctor")
-            elif risk > 0.4:
-                st.warning("Moderate Risk - Monitor health")
-            else:
-                st.success("Low Risk - Keep healthy habits")
+                risk = model.predict_proba(input_transformed)[0][1]
+                st.metric("Risk Score", f"{risk:.1%}")
+                if risk > 0.7:
+                    st.error("High Risk - Consult a doctor")
+                elif risk > 0.4:
+                    st.warning("Moderate Risk - Monitor health")
+                else:
+                    st.success("Low Risk - Keep healthy habits")
+
+except Exception as e:
+    st.error("🚨 The app crashed with the following error:")
+    st.code(traceback.format_exc())
