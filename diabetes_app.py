@@ -93,7 +93,7 @@ def perform_dimensionality_reduction(X, y):
         fig, ax = plt.subplots()
         sns.barplot(data=importance.sort_values("Importance", ascending=False).head(10), x="Importance", y="Feature", ax=ax)
         st.pyplot(fig)
-        return X[top_features], model
+        return X[top_features], top_features.tolist()
 
 # =================== MODEL TRAINING ===================
 def train_svm(X_train, y_train):
@@ -116,7 +116,12 @@ with st.sidebar:
     st.markdown("- 📊 EDA\n- 🔍 Feature Selection\n- 🧠 Train Model\n- 📈 Predict Risk")
 
 # Load and clean data
-df = pd.read_csv(uploaded_file) if uploaded_file else load_default_data()
+try:
+    df = pd.read_csv(uploaded_file) if uploaded_file else load_default_data()
+except FileNotFoundError:
+    st.error("Default dataset not found. Please upload your own CSV file.")
+    st.stop()
+
 df_clean = clean_data(df)
 X = df_clean.drop('Diabetes_binary', axis=1)
 y = df_clean['Diabetes_binary']
@@ -138,8 +143,7 @@ with tab3:
         X_train, X_test, y_train, y_test = train_test_split(X_reduced, y, test_size=0.2, random_state=42)
         model = train_svm(X_train, y_train)
         os.makedirs("models", exist_ok=True)
-        joblib.dump(model, "models/model.joblib")
-        joblib.dump(reducer, "models/reducer.joblib")
+        joblib.dump((model, reducer), "models/model.joblib")
 
         acc = accuracy_score(y_test, model.predict(X_test))
         st.metric("Accuracy", f"{acc:.2%}")
@@ -152,8 +156,7 @@ with tab3:
 with tab4:
     st.header("Predict Risk")
     if os.path.exists("models/model.joblib"):
-        model = joblib.load("models/model.joblib")
-        reducer = joblib.load("models/reducer.joblib")
+        model, reducer = joblib.load("models/model.joblib")
 
         st.subheader("Enter Values for Prediction")
         input_data = {}
@@ -169,13 +172,17 @@ with tab4:
                 if feat not in input_data:
                     input_data[feat] = float(X[feat].median())
             input_df = pd.DataFrame([input_data])
+
             if isinstance(reducer, PCA):
                 scaled_input = StandardScaler().fit_transform(input_df)
                 input_transformed = reducer.transform(scaled_input)
             elif hasattr(reducer, 'get_support'):
                 input_transformed = input_df[X.columns[reducer.get_support()]]
+            elif isinstance(reducer, list):
+                input_transformed = input_df[reducer]
             else:
-                input_transformed = input_df[reducer.feature_names_in_]
+                st.error("Unknown reducer type")
+                st.stop()
 
             risk = model.predict_proba(input_transformed)[0][1]
             st.metric("Risk Score", f"{risk:.1%}")
